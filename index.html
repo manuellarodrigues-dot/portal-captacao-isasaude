@@ -79,7 +79,7 @@
     function pageHtml(){
       if(state.page==="cadastro") return cadastroHtml();
       if(state.page==="profissionais") return profissionaisHtml();
-      if(state.page==="ganhos") return ganhosHtml(state.profissionais.filter(isCadastroPositivo).length,"Resumo de Ganhos","Contabiliza apenas profissionais com Cadastro Realizado positivo.");
+      if(state.page==="ganhos") return ganhosMensaisHtml();
       if(state.page==="simulacao") return simulacaoHtml();
       if(state.page==="admin") return adminHtml();
       return "";
@@ -107,8 +107,63 @@
       return true;
     }
     function badge(text,tone=""){ return `<span class="badge ${tone}">${esc(text)}</span>`; }
-    function ganhosHtml(total,t,s){
-      return `${title(t,s)}<div class="grid"><section class="card"><p class="eyebrow">Montante a receber</p><p style="font-size:38px;font-weight:900">${fmtR(calc(total))}</p></section><section class="card"><p class="eyebrow">Cadastros positivos</p><p style="font-size:48px;font-weight:900;color:var(--cyan)">${total}</p></section></div>${faixasHtml(total)}`;
+    function ganhosMensaisHtml(){
+      const meses=ganhosPorMes();
+      const atualKey=mesAtualKey();
+      const atual=meses.find(m=>m.key===atualKey)||{key:atualKey,label:mesLabel(atualKey),total:0,ganho:0};
+      const historico=meses.filter(m=>m.key!==atualKey);
+      return `${title("Resumo de Ganhos","Contabiliza por mês, usando a Data Identificação dos profissionais com Cadastro Realizado positivo.")}
+        <div class="grid">
+          <section class="card" style="border-color:rgba(9,212,215,.35);box-shadow:0 14px 40px rgba(0,0,0,.18)">
+            <p class="eyebrow">Mês atual - ${esc(atual.label)}</p>
+            <p style="font-size:38px;font-weight:900">${fmtR(atual.ganho)}</p>
+            <p class="muted" style="margin-top:8px">${atual.total} cadastro${atual.total===1?"":"s"} positivo${atual.total===1?"":"s"} neste mês</p>
+          </section>
+          <section class="card">
+            <p class="eyebrow">Cadastros positivos no mês</p>
+            <p style="font-size:48px;font-weight:900;color:var(--cyan)">${atual.total}</p>
+            <p class="muted">Base: Data Identificação</p>
+          </section>
+        </div>
+        ${faixasHtml(atual.total)}
+        <section class="card" style="margin-top:20px;overflow:auto;padding:0">
+          <div style="padding:20px 20px 8px"><p class="eyebrow">Histórico mensal</p></div>
+          <table style="min-width:620px">
+            <thead><tr><th>Mês</th><th>Cadastros positivos</th><th>Montante</th></tr></thead>
+            <tbody>
+              ${[atual,...historico].map(m=>`<tr style="${m.key===atualKey?"background:rgba(9,212,215,.05)":""}"><td class="strong">${esc(m.label)}${m.key===atualKey?" <span class='badge pos'>Atual</span>":""}</td><td>${m.total}</td><td>${fmtR(m.ganho)}</td></tr>`).join("")||`<tr><td colspan="3" style="text-align:center;padding:32px">Nenhum histórico encontrado.</td></tr>`}
+            </tbody>
+          </table>
+        </section>`;
+    }
+    function ganhosPorMes(){
+      const map=new Map();
+      state.profissionais.filter(isCadastroPositivo).forEach(p=>{
+        const key=mesKey(p.dataIdentificacao||p.dataCadastro);
+        if(!key) return;
+        if(!map.has(key)) map.set(key,{key,label:mesLabel(key),total:0,ganho:0});
+        map.get(key).total++;
+      });
+      if(!map.has(mesAtualKey())) map.set(mesAtualKey(),{key:mesAtualKey(),label:mesLabel(mesAtualKey()),total:0,ganho:0});
+      const rows=[...map.values()].map(m=>({...m,ganho:calc(m.total)}));
+      return rows.sort((a,b)=>b.key.localeCompare(a.key));
+    }
+    function mesAtualKey(){
+      const d=new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    }
+    function mesKey(value){
+      const s=String(value||"").trim();
+      let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if(m) return `${m[3]}-${String(Number(m[2])).padStart(2,"0")}`;
+      m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if(m) return `${m[1]}-${String(Number(m[2])).padStart(2,"0")}`;
+      return "";
+    }
+    function mesLabel(key){
+      const [ano,mes]=String(key||"").split("-");
+      const nomes=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+      return mes&&ano ? `${nomes[Number(mes)-1]||mes}/${ano}` : "Sem data";
     }
     function simulacaoHtml(){
       return `${title("Simulação de Ganhos","Arraste para estimar a remuneração por quantidade de profissionais.")}<section class="card"><p class="eyebrow">Quantidade simulada</p><input id="simRange" type="range" min="0" max="200" value="${state.sim}" style="width:100%;accent-color:var(--pink)"><p style="font-size:44px;font-weight:900;color:var(--cyan);margin-top:12px">${state.sim}</p><p class="eyebrow" style="margin-top:20px">Total simulado</p><p style="font-size:38px;font-weight:900">${fmtR(calc(state.sim))}</p></section>${faixasHtml(state.sim)}`;
